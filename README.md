@@ -59,7 +59,6 @@ Built for sharing a home GPU rig with a trusted client — securely, with one co
 | `tailscale` | `tailscale/tailscale` | frontend | Yes | No |
 | `n8n` | `n8nio/n8n` | frontend + backend | Yes | No |
 | `ollama` | `ollama/ollama` | backend | No | Yes |
-| `ollama-init` | `ollama/ollama` | frontend | Yes (model pull only) | Yes |
 
 ---
 
@@ -122,10 +121,10 @@ openssl rand -hex 32   # → N8N_USER_MANAGEMENT_JWT_SECRET
 docker compose up -d
 ```
 
-On the first run, `ollama-init` downloads the `llama3.1:8b` model (~4.7 GB). Monitor progress:
+On first setup, pull a model using the helper script:
 
 ```bash
-docker compose logs -f ollama-init
+./scripts/pull-model.sh llama3.1:8b
 ```
 
 ### 6. Open n8n
@@ -313,7 +312,7 @@ This stack implements defense-in-depth across five layers:
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **`frontend`** — Standard bridge network with outbound internet. Hosts Tailscale (needs the mesh), n8n (needs external API access), and `ollama-init` (needs to download models on first run).
+- **`frontend`** — Standard bridge network with outbound internet. Hosts Tailscale (needs the mesh) and n8n (needs external API access).
 - **`backend`** — Internal-only bridge. No route to the internet. Hosts Ollama for inference. n8n bridges both networks to reach Ollama.
 
 ---
@@ -380,20 +379,6 @@ tar czf ollama-backup-$(date +%Y%m%d).tar.gz -C /mnt/d/Models/ollama .
 ---
 
 ## Troubleshooting
-
-### `ollama-init` fails or hangs
-
-The init container needs internet access to pull models. Check that the `frontend` network has outbound connectivity:
-
-```bash
-docker compose logs ollama-init
-```
-
-If the model pull stalled, restart it:
-
-```bash
-docker compose up -d ollama-init
-```
 
 ### n8n can't reach Ollama
 

@@ -38,34 +38,6 @@ services:
       - frontend
     restart: unless-stopped
 
-  ollama-init:
-    container_name: ollama-init
-    image: ollama/ollama:latest
-    volumes:
-      - ${OLLAMA_DATA_PATH:-/mnt/d/Models/ollama}:/root/.ollama
-    networks:
-      - frontend
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        ollama serve &
-        SERVER_PID=$$!
-        until ollama list >/dev/null 2>&1; do sleep 2; done
-        echo "Pulling llama3.1:8b..."
-        ollama pull llama3.1:8b
-        echo "Model pull complete."
-        kill $$SERVER_PID
-        wait $$SERVER_PID 2>/dev/null
-        exit 0
-    restart: "no"
-
   ollama:
     container_name: ollama
     image: ollama/ollama:latest
@@ -80,9 +52,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    depends_on:
-      ollama-init:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   n8n:

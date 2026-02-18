@@ -4,14 +4,14 @@ networks:
   frontend:
     name: frontend
     driver: bridge
-  backend:
-    name: backend
-    driver: bridge
-    internal: true
+  ollama-net:
+    external: true
 
 volumes:
   n8n_data:
     name: n8n-data
+  n8n_patched_data:
+    name: n8n-patched-data
   tailscale_state:
     name: tailscale-state
 
@@ -38,20 +38,43 @@ services:
       - frontend
     restart: unless-stopped
 
-  ollama:
-    container_name: ollama
-    image: ollama/ollama:latest
+  n8n-patched:
+    container_name: n8n-patched
+    build:
+      context: ./n8n
+      dockerfile: Dockerfile
+      args:
+        N8N_VERSION: ${N8N_VERSION:-2.8.3}
+        NODE_VERSION: ${NODE_VERSION:-22}
+    image: jlyve-n8n:${N8N_VERSION:-2.8.3}
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_PATCHED_ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_PATCHED_JWT_SECRET}
+      - WEBHOOK_URL=${WEBHOOK_URL_PATCHED:-http://localhost:5679}
+      - N8N_AI_ENABLED=true
+      - N8N_DEV_LICENSE_BYPASS=true
+    ports:
+      - "5679:5678"
     volumes:
-      - ${OLLAMA_DATA_PATH:-/mnt/d/Models/ollama}:/root/.ollama
-    networks:
-      - backend
+      - n8n_patched_data:/home/node/.n8n
+    tmpfs:
+      - /tmp
+      - /home/node/.cache
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    networks:
+      - frontend
+      - ollama-net
+    profiles:
+      - patched
     restart: unless-stopped
 
   n8n:
@@ -79,10 +102,8 @@ services:
           cpus: "2.0"
     networks:
       - frontend
-      - backend
+      - ollama-net
     depends_on:
       tailscale:
-        condition: service_started
-      ollama:
         condition: service_started
     restart: unless-stopped

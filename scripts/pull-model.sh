@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONTAINER="ollama"
-NETWORK="frontend"
+CONTAINER="casper-ollama"
+NETWORK="casper_frontend"
 
 usage() {
   echo "Usage: $0 <model> [model...]"

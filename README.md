@@ -17,6 +17,8 @@ Built for sharing a home GPU rig with a trusted client — securely, with one co
 - [Tailscale ACL Policy](#tailscale-acl-policy)
 - [Security Model](#security-model)
 - [Network Topology](#network-topology)
+- [Performance Tuning](#performance-tuning)
+- [Enterprise Features (Dev Bypass)](#enterprise-features-dev-bypass)
 - [Operations](#operations)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -57,7 +59,7 @@ Built for sharing a home GPU rig with a trusted client — securely, with one co
 | Service | Image | Network | Internet | GPU |
 |---------|-------|---------|----------|-----|
 | `tailscale` | `tailscale/tailscale` | frontend | Yes | No |
-| `n8n` | `n8nio/n8n` | frontend + backend | Yes | No |
+| `n8n` | `jlyve-n8n:2.8.3` (custom build) | frontend + backend | Yes | No |
 | `ollama` | `ollama/ollama` | backend | No | Yes |
 
 ---
@@ -317,6 +319,91 @@ This stack implements defense-in-depth across five layers:
 
 ---
 
+## Performance Tuning
+
+The Ollama service is configured with GPU performance optimizations tuned for a single NVIDIA GPU with 24 GB VRAM. All settings are environment variables in `docker-compose.yml` under the `ollama` service — adjust them to match your hardware.
+
+### Inference settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_FLASH_ATTENTION` | `1` | Enables flash attention for faster inference and lower VRAM usage during long context windows. |
+| `OLLAMA_KV_CACHE_TYPE` | `q8_0` | Uses 8-bit quantized KV cache instead of FP16, reducing VRAM consumption with minimal quality loss. |
+| `OLLAMA_NUM_PARALLEL` | `2` | Maximum concurrent inference requests. Increase if running parallel n8n workflows; decrease if hitting OOM. |
+| `OLLAMA_KEEP_ALIVE` | `30m` | How long a model stays loaded in VRAM after its last request. Avoids reload latency for repeated use. Set to `0` to unload immediately. |
+
+### Resource limits
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_MAX_LOADED_MODELS` | `1` | Maximum models held in VRAM simultaneously. Keep at `1` on 24 GB cards to prevent OOM when using large models. |
+| `OLLAMA_GPU_OVERHEAD` | `512000000` | Bytes reserved for GPU overhead (512 MB). Prevents Ollama from consuming every last byte of VRAM. |
+| `OLLAMA_LOAD_TIMEOUT` | `10m` | Maximum time to wait for a model to load before failing. Prevents indefinite hangs on corrupted or oversized models. |
+
+### Container-level tuning
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `shm_size` | `1g` | Shared memory for GPU inter-process communication. |
+| `memlock` (ulimit) | `-1` (unlimited) | Prevents the OS from swapping GPU-mapped memory to disk — critical for inference performance. |
+| `stack` (ulimit) | `64 MB` | Adequate stack size for model loading operations. |
+
+### Healthcheck
+
+Ollama exposes a healthcheck (`ollama list`) that runs every 30 seconds. The n8n service uses `depends_on: condition: service_healthy` so it won't start until Ollama is fully ready. If Ollama fails 3 consecutive healthchecks, Docker marks it as unhealthy.
+
+---
+
+## Enterprise Features (Dev Bypass)
+
+The n8n service uses a custom-built image (`jlyve-n8n`) that unlocks all enterprise features for local development and home-lab use.
+
+**This is for development/home-lab use only — not production.**
+
+The bypass is based on [MatrixForgeLabs/n8n-dev-license-bypass](https://github.com/MatrixForgeLabs/n8n-dev-license-bypass), forward-ported to n8n v2.x.
+
+### What it enables
+
+- LDAP / SAML authentication
+- Workflow sharing and advanced permissions
+- Workflow history with unlimited retention
+- Variables, external secrets
+- Source control (Git)
+- Log streaming, audit logs
+- Worker view, debug in editor
+- AI assistant, AI credits
+- Unlimited users, triggers, and team projects
+
+### Building the custom n8n image
+
+The patched image is built from source using a multi-stage Dockerfile. First-time builds take **15-30 minutes** and require **8+ GB RAM**.
+
+```bash
+# Build the image
+docker compose build n8n
+
+# Start the stack
+docker compose up -d
+```
+
+### Updating the n8n version
+
+1. Change `N8N_VERSION` in your `.env` file.
+2. Verify the patch still applies to the new version (check the [release notes](https://github.com/n8n-io/n8n/releases)).
+3. Rebuild: `docker compose build --no-cache n8n`
+4. Restart: `docker compose up -d`
+
+If the patch fails to apply, the target files may have changed. Compare the new source against `n8n/dev-license-bypass.patch` and update the context lines.
+
+### Configuration
+
+| Variable | Description |
+|----------|-------------|
+| `N8N_VERSION` | Pinned n8n version (must match a patch-compatible release) |
+| `NODE_VERSION` | Node.js major version for the build (default: 22) |
+
+---
+
 ## Operations
 
 ### Start the stack
@@ -350,6 +437,7 @@ docker compose restart n8n
 
 ```bash
 docker compose pull
+docker compose build n8n
 docker compose up -d
 ```
 
@@ -417,6 +505,22 @@ If this fails, verify the NVIDIA Container Toolkit is installed and the Docker d
 ```bash
 sudo systemctl restart docker
 ```
+
+### n8n build fails with OOM
+
+The n8n build requires significant memory. If `docker compose build n8n` fails with a killed process or OOM error:
+
+1. Increase Docker's memory limit to at least 8 GB (Docker Desktop → Settings → Resources).
+2. Close other memory-intensive applications during the build.
+3. Retry with `docker compose build n8n`.
+
+### n8n patch fails to apply
+
+If the build fails at `git apply dev-license-bypass.patch`, the n8n source code at the target version has changed in a way that conflicts with the patch context.
+
+1. Check which version you're targeting: `grep N8N_VERSION .env`
+2. The patch was created for `2.8.3`. Newer versions may require patch updates.
+3. Compare the new source against the 4 patched files and update `n8n/dev-license-bypass.patch`.
 
 ### n8n container crashes with permission errors
 

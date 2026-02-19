@@ -1,0 +1,124 @@
+diff --git a/packages/cli/src/license.ts b/packages/cli/src/license.ts
+--- a/packages/cli/src/license.ts
++++ b/packages/cli/src/license.ts
+@@ -54,6 +54,66 @@
+ 		forceRecreate = false,
+ 		isCli = false,
+ 	}: { forceRecreate?: boolean; isCli?: boolean } = {}) {
++		// DEV LICENSE BYPASS: When enabled, create a fake license manager with all
++		// enterprise features unlocked and return early — never contacts the real
++		// license server. For local development / home-lab use only.
++		const _env = (globalThis as any).process?.env ?? {};
++		const DEV_LICENSE_BYPASS = _env.N8N_DEV_LICENSE_BYPASS === 'true';
++
++		if (DEV_LICENSE_BYPASS) {
++			this.logger.warn('DEV MODE: License manager bypassed. All enterprise features ENABLED.');
++
++			const fakeEntitlements: any[] = [
++				{
++					productId: 'n8n-enterprise',
++					productMetadata: {
++						planName: 'Enterprise',
++						terms: { isMainPlan: true },
++					},
++					validFrom: new Date(),
++					validTo: new Date('2099-12-31'),
++					features: Object.fromEntries(
++						Object.keys(LICENSE_FEATURES).map((f) => [f, true]),
++					),
++					quotas: {
++						[LICENSE_QUOTAS.USERS_LIMIT]: UNLIMITED_LICENSE_QUOTA,
++						[LICENSE_QUOTAS.TRIGGER_LIMIT]: UNLIMITED_LICENSE_QUOTA,
++						[LICENSE_QUOTAS.VARIABLES_LIMIT]: UNLIMITED_LICENSE_QUOTA,
++						[LICENSE_QUOTAS.AI_CREDITS]: 99999999,
++						[LICENSE_QUOTAS.WORKFLOW_HISTORY_PRUNE_LIMIT]: UNLIMITED_LICENSE_QUOTA,
++						[LICENSE_QUOTAS.TEAM_PROJECT_LIMIT]: UNLIMITED_LICENSE_QUOTA,
++					},
++				},
++			];
++
++			// @ts-ignore — faking the entire LicenseManager SDK
++			this.manager = {
++				hasFeatureEnabled: (f: string) => f !== 'feat:showNonProdBanner',
++				getFeatureValue: (feature: string) => {
++					if (feature === 'planName') return 'Enterprise';
++					if (Object.values(LICENSE_QUOTAS).includes(feature as any)) {
++						return UNLIMITED_LICENSE_QUOTA;
++					}
++					return true;
++				},
++				getCurrentEntitlements: () => fakeEntitlements,
++				getManagementJwt: () => 'dev-jwt-fake',
++				getConsumerId: () => 'dev-consumer-id',
++				toString: () => 'DEV UNLOCKED: Enterprise (unlimited)',
++				activate: async () => {},
++				renew: async () => {},
++				reload: async () => {},
++				clear: async () => {},
++				shutdown: async () => {},
++				enableAutoRenewals: () => {},
++				disableAutoRenewals: () => {},
++				initialize: async () => {},
++			} as any;
++
++			this.logger.debug('Fake license manager initialized');
++			return;
++		}
++
+ 		if (this.manager && !forceRecreate) {
+ 			this.logger.warn('License manager already initialized or shutting down');
+ 			return;
+diff --git a/packages/frontend/editor-ui/src/app/components/EnterpriseEdition.ee.vue b/packages/frontend/editor-ui/src/app/components/EnterpriseEdition.ee.vue
+--- a/packages/frontend/editor-ui/src/app/components/EnterpriseEdition.ee.vue
++++ b/packages/frontend/editor-ui/src/app/components/EnterpriseEdition.ee.vue
+@@ -3,6 +3,10 @@
+ import type { EnterpriseEditionFeatureValue } from '@/Interface';
+ import { useSettingsStore } from '@/app/stores/settings.store';
+
++// DEV LICENSE BYPASS: unconditionally render enterprise slots when the Vite
++// build-time flag is set. For local development / home-lab use only.
++const DEV_LICENSE_BYPASS = import.meta.env.VITE_DEV_LICENSE_BYPASS === 'true';
++
+ const props = withDefaults(
+ 	defineProps<{
+ 		features: EnterpriseEditionFeatureValue[];
+@@ -24,7 +28,7 @@
+
+ <template>
+ 	<div>
+-		<slot v-if="canAccess" />
++		<slot v-if="DEV_LICENSE_BYPASS || canAccess" />
+ 		<slot v-else name="fallback" />
+ 	</div>
+ </template>
+diff --git a/packages/frontend/editor-ui/src/app/stores/settings.store.ts b/packages/frontend/editor-ui/src/app/stores/settings.store.ts
+--- a/packages/frontend/editor-ui/src/app/stores/settings.store.ts
++++ b/packages/frontend/editor-ui/src/app/stores/settings.store.ts
+@@ -64,7 +64,15 @@
+ 		secureCookie: settings.value.authCookie.secure,
+ 	}));
+
+-	const isEnterpriseFeatureEnabled = computed(() => settings.value.enterprise ?? {});
++	const isEnterpriseFeatureEnabled = computed(() => {
++		// DEV LICENSE BYPASS: return a Proxy that answers true for every feature
++		// check when the Vite build-time flag is set. For local dev / home-lab only.
++		const devBypass = import.meta.env.VITE_DEV_LICENSE_BYPASS === 'true';
++		if (devBypass) {
++			return new Proxy({}, { get: (_, p) => p !== 'showNonProdBanner' });
++		}
++		return settings.value.enterprise ?? {};
++	});
+
+ 	const nodeJsVersion = computed(() => settings.value.nodeJsVersion);
+
+diff --git a/packages/frontend/editor-ui/src/shims-global.d.ts b/packages/frontend/editor-ui/src/shims-global.d.ts
+--- a/packages/frontend/editor-ui/src/shims-global.d.ts
++++ b/packages/frontend/editor-ui/src/shims-global.d.ts
+@@ -44,6 +44,7 @@
+ 			NODE_ENV: 'development' | 'production';
+ 			VUE_APP_URL_BASE_API: string;
+ 			VUE_SCAN: boolean;
++			VITE_DEV_LICENSE_BYPASS?: string;
+ 		};
+ 	}
+

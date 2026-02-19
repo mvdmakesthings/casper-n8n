@@ -24,6 +24,7 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve-config.json
       - TS_USERSPACE=false
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
     volumes:
       - tailscale_state:/var/lib/tailscale
       - ./tailscale/serve-config.json:/config/serve-config.json:ro

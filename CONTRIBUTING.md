@@ -1,4 +1,4 @@
-# Contributing to N8N-TailScale
+# Contributing to casper-n8n
 
 Thank you for your interest in contributing. This guide explains how to report issues, suggest improvements, and submit changes.
 
@@ -25,7 +25,7 @@ Be respectful, constructive, and inclusive. Harassment, discrimination, and bad-
 
 ## Reporting Issues
 
-Before opening an issue, check the [existing issues](https://github.com/mvdmakesthings/N8N-TailScale/issues) to avoid duplicates.
+Before opening an issue, check the [existing issues](https://github.com/mvdmakesthings/casper-n8n/issues) to avoid duplicates.
 
 When filing a bug report, include:
 
@@ -48,7 +48,7 @@ docker compose logs --tail=50
 
 ## Suggesting Features
 
-Open a [GitHub issue](https://github.com/mvdmakesthings/N8N-TailScale/issues/new) with the label `enhancement`. Describe:
+Open a [GitHub issue](https://github.com/mvdmakesthings/casper-n8n/issues/new) with the label `enhancement`. Describe:
 
 - **The problem** — What limitation or gap you're encountering
 - **Proposed solution** — How you'd like it to work
@@ -70,8 +70,8 @@ Feature requests that align with the project's scope (secure, self-hosted, GPU-s
 ### Local setup
 
 ```bash
-git clone git@github.com:mvdmakesthings/N8N-TailScale.git
-cd N8N-TailScale
+git clone git@github.com:mvdmakesthings/casper-n8n.git
+cd casper-n8n
 cp .env.example .env
 # Fill in .env with your values (see README.md for details)
 ```

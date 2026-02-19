@@ -8,3 +8,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Local overrides & secrets
+.env.local
+.env.*.local
+*.key
+*.pem
